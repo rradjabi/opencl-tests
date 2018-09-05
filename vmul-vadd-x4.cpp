@@ -4,8 +4,9 @@
 #include <vector>
 #include <string>
 
-#define __CL_ENABLE_EXCEPTIONS
-#include <CL/cl.hpp>
+#include "xcl2.hpp"
+//#define __CL_ENABLE_EXCEPTIONS
+//#include <CL/cl.hpp>
 
 int run_krnl( cl::Context &context, std::vector<cl::Device> &device, cl::CommandQueue &queue, int &N,
              const char *fileName, const char *kernelName,
@@ -21,7 +22,7 @@ int main( int argc, char *argv[]) {
         std::cout << "Setting vector size to: " << N << std::endl;
     } 
 
-    try {
+    //try {
     // Get list of OpenCL platforms.
     std::vector<cl::Platform> platform;
     cl::Platform::get(&platform);
@@ -32,36 +33,39 @@ int main( int argc, char *argv[]) {
     }
 
     // Get first available CPU device which supports double precision.
-    cl::Context context;
     std::vector<cl::Device> device;
-    for(auto p = platform.begin(); device.empty() && p != platform.end(); p++) {
-        std::vector<cl::Device> pldev;
+    device = xcl::get_xil_devices();
 
-        try {
-        p->getDevices(CL_DEVICE_TYPE_CPU, &pldev);
+    cl::Context context( device[0] );
 
-        for(auto d = pldev.begin(); device.empty() && d != pldev.end(); d++) {
-            if (!d->getInfo<CL_DEVICE_AVAILABLE>()) continue;
+//    for(auto p = platform.begin(); device.empty() && p != platform.end(); p++) {
+//        std::vector<cl::Device> pldev;
+//
+//        try {
+//        p->getDevices(CL_DEVICE_TYPE_CPU, &pldev);
+//
+//        for(auto d = pldev.begin(); device.empty() && d != pldev.end(); d++) {
+//            if (!d->getInfo<CL_DEVICE_AVAILABLE>()) continue;
+//
+//            std::string ext = d->getInfo<CL_DEVICE_EXTENSIONS>();
+//
+//            if (
+//                ext.find("cl_khr_fp64") == std::string::npos &&
+//                ext.find("cl_amd_fp64") == std::string::npos
+//               ) continue;
+//
+//            device.push_back(*d);
+//            context = cl::Context(device);
+//        }
+//        } catch(...) {
+//        device.clear();
+//        }
+//    }
 
-            std::string ext = d->getInfo<CL_DEVICE_EXTENSIONS>();
-
-            if (
-                ext.find("cl_khr_fp64") == std::string::npos &&
-                ext.find("cl_amd_fp64") == std::string::npos
-               ) continue;
-
-            device.push_back(*d);
-            context = cl::Context(device);
-        }
-        } catch(...) {
-        device.clear();
-        }
-    }
-
-    if (device.empty()) {
-        std::cerr << "CPUs with double precision not found." << std::endl;
-        return 1;
-    }
+//    if (device.empty()) {
+//        std::cerr << "CPUs with double precision not found." << std::endl;
+//        return 1;
+//    }
 
     std::cout << device[0].getInfo<CL_DEVICE_NAME>() << std::endl;
 
@@ -133,7 +137,7 @@ int main( int argc, char *argv[]) {
     std::pair<cl::Buffer,int> vmul_C3 = std::make_pair( C3, 3 );
     
     run_krnl( context, device, queue, N,
-              "vmulx4.cl", "vmul",
+              "vmulx4.xclbin", "vmul",
               vmul_A0, vmul_B0, vmul_C0,
               vmul_A1, vmul_B1, vmul_C1,
               vmul_A2, vmul_B2, vmul_C2,
@@ -157,7 +161,7 @@ int main( int argc, char *argv[]) {
     std::pair<cl::Buffer,int> vadd_C3 = std::make_pair( D3, 3 );
 
     run_krnl( context, device, queue, N,
-              "vaddx4.cl", "vadd",
+              "vaddx4.xclbin", "vadd",
               vadd_A0, vadd_B0, vadd_C0,
               vadd_A1, vadd_B1, vadd_C1,
               vadd_A2, vadd_B2, vadd_C2,
@@ -197,13 +201,13 @@ int main( int argc, char *argv[]) {
     }
     std::cout << std::endl;
 
-    } catch (const cl::Error &err) {
-    std::cerr
-        << "OpenCL error: "
-        << err.what() << "(" << err.err() << ")"
-        << std::endl;
-    return 1;
-    }
+    //catch (const cl::Error &err) {
+    //std::cerr
+    //    << "OpenCL error: "
+    //    << err.what() << "(" << err.err() << ")"
+    //    << std::endl;
+    //return 1;
+    //}
 
 
     return 0;
@@ -217,28 +221,32 @@ int run_krnl( cl::Context &context, std::vector<cl::Device> &device, cl::Command
               std::pair<cl::Buffer,int> &A3, std::pair<cl::Buffer,int> &B3, std::pair<cl::Buffer,int> &C3 )
 {
     // Compile OpenCL program for found device.
-    std::ifstream kernelFile(fileName, std::ios::in);
-    if (!kernelFile.is_open()) {
-        std::cout << "Failed to open cl file for reading: " << fileName << std::endl;
-        return -1;
-    }
+//    std::ifstream kernelFile(fileName, std::ios::in);
+//    if (!kernelFile.is_open()) {
+//        std::cout << "Failed to open cl file for reading: " << fileName << std::endl;
+//        return -1;
+//    }
 
-    std::ostringstream oss;
-    oss << kernelFile.rdbuf();
-    std::string srcStdStr = oss.str();
-    cl::Program::Sources sources;
-    sources.push_back( {srcStdStr.c_str(), srcStdStr.length()} );
-    cl::Program program( context, sources );
+//    std::ostringstream oss;
+//    oss << kernelFile.rdbuf();
+//    std::string srcStdStr = oss.str();
+//    cl::Program::Sources sources;
+//    sources.push_back( {srcStdStr.c_str(), srcStdStr.length()} );
+//    cl::Program program( context, sources );
+    std::string device_name = device[0].getInfo<CL_DEVICE_NAME>();
+    std::string binaryFile = xcl::find_binary_file( device_name, fileName );
+    cl::Program::Binaries bins = xcl::import_binary_file( binaryFile );
+    cl::Program program( context, device, bins );
 
-    try {
+    //try {
         program.build(device);
-    } catch (const cl::Error&) {
-        std::cerr
-        << "OpenCL compilation error" << std::endl
-        << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device[0])
-        << std::endl;
-        return 1;
-    }
+    //} catch (const cl::Error&) {
+    //    std::cerr
+    //    << "OpenCL compilation error" << std::endl
+    //    << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device[0])
+    //    << std::endl;
+    //    return 1;
+    //}
 
     cl::Kernel krnl_0(program, std::string( std::string(kernelName) + std::string("0") ).c_str() );
     cl::Kernel krnl_1(program, std::string( std::string(kernelName) + std::string("1") ).c_str() );
@@ -275,6 +283,8 @@ int run_krnl( cl::Context &context, std::vector<cl::Device> &device, cl::Command
     queue.enqueueNDRangeKernel(krnl_1, cl::NullRange, N, cl::NullRange);
     queue.enqueueNDRangeKernel(krnl_2, cl::NullRange, N, cl::NullRange);
     queue.enqueueNDRangeKernel(krnl_3, cl::NullRange, N, cl::NullRange);
+
+    queue.finish();
 
     return 0;
 }
